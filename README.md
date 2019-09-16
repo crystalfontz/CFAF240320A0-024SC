@@ -1,4 +1,4 @@
-# CFAF240320A0-024SC
+# CFAF240320A0-024SC  
 
 Crystalfontz CFAF240320A0-024SC.
 This display is a 2.4in 240x320 TFT with a capacitive touch panel.
