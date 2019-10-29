@@ -10,7 +10,6 @@ https://www.crystalfontz.com/product/cfaf240320a0024sn
 
 ## Connection Details
 
-
 |  LCD Pin   | Seeeduino Pin|    Connection Description    |
 |------------|--------------|------------------------------|
 | 1 (LED-A)  |              | LED Power (Approx 9V @ 40mA) |
@@ -29,7 +28,6 @@ https://www.crystalfontz.com/product/cfaf240320a0024sn
 | 39 (VCI)   |              | +3.3V Power                  |
 | 40 (GND)   | GND          | Ground                       |
 
-
 | Touch Panel Pin | Seeeduino Pin| Connection Description |
 |-----------------|--------------|------------------------|
 | 1 (GND)         | GND          | Ground                 |
@@ -38,7 +36,6 @@ https://www.crystalfontz.com/product/cfaf240320a0024sn
 | 4 (SDA)         | SDA          | I2C Data               |
 | 5 (SCL)         | SCL          | I2C Clock              |
 | 6 (VDD)         |              | +3.3V Power            |
-
 
 | microSD Pin | Seeeduino Pin| Connection Description |
 |-------------|--------------|------------------------|
