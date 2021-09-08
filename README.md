@@ -37,6 +37,10 @@ https://www.crystalfontz.com/product/cfaf240320a0024sc
 | 5 (SCL)         | SCL          | I2C Clock              |
 | 6 (VDD)         |              | +3.3V Power            |
 
+## Micro SD Connection Details
+
+A micro SD Adapter Board can be found here: https://www.crystalfontz.com/product/cfa10112
+
 | microSD Pin | Seeeduino Pin| Connection Description |
 |-------------|--------------|------------------------|
 | 2 (CS)      | 7            | SD CS                  |
