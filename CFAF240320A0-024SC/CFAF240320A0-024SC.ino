@@ -76,6 +76,7 @@
 // | 5 (SCL)         | SCL           | I2C Clock              |
 // | 6 (VDD)         |               | +3.3V Power            |
 
+//A CFA10112 micro SD card adapter should be used: https://www.crystalfontz.com/product/cfa10112
 // | microSD Pin | Seeeduino Pin | Connection Description |
 // |-------------|---------------|------------------------|
 // | 2 (CS)      | 7             | SD CS                  |
