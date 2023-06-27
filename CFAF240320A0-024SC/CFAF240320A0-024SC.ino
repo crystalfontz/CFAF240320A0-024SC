@@ -1,17 +1,21 @@
 //==============================================================================
 //
-//  CRYSTALFONTZ CFAF240320A0-024SC
+//  CRYSTALFONTZ CFAF240320Ax-024Sx
+//  Family of 2.4" TFT displays
+//  CFAF204320A0-024SN - No touchscreen
+//  CFAF204320A0-024SC - Capacitive touchscreen
+//  CFAF204320A0-024SR - Resistive touchscreen
 //
-//  Code written for Seeeduino v4.2 set to 3.3v (important!)
+//  Code written for Seeeduino set to 3.3v (important!)
 //
 //  This code uses the 4-wire SPI mode of the display,
-//  and I2C mode for the touch panel interface.
+//  and I2C mode for the capacitive touch panel interface.
 //
 //  The controller is a Sitronix ST7789V:
 //    https://www.crystalfontz.com/controllers/Sitronix/ST7789V
 //
-//  Seeeduino v4.2, an open-source 3.3v capable Arduino clone.
-//    https://www.seeedstudio.com/Seeeduino-V4.2-p-2517.html
+//  Seeeduino, an open-source 3.3v capable Arduino clone.
+//    https://www.crystalfontz.com/product/cfapn15062-seeeduino-arduino-clone-microprocessor
 //    https://github.com/SeeedDocument/SeeeduinoV4/raw/master/resources/Seeeduino_v4.2_sch.pdf
 //
 //==============================================================================
@@ -19,6 +23,7 @@
 //  2017-10-02 Brent A. Crosby / Crystalfontz
 //  2018-08-22 Max Roberg / Crystalfontz
 //  2019-09-09 Mark Williams / Crystalfontz
+//  2023-06-26 Kelsey Zaches / Crystalfontz
 //
 //==============================================================================
 //This is free and unencumbered software released into the public domain.
@@ -53,7 +58,7 @@
 // |------------|---------------|------------------------------|
 // | 1 (LED-A)  |               | LED Power (Approx 9V @ 40mA) |
 // | 2 (LED-K)  |               | LED Ground                   |
-// | 3 (IOVCC)  |               | +3.3V Power                  |
+// | 3 (IOVCC)  | 3v3           | +3.3V Power                  |
 // | 24 (SDA)   | 11            | LCD MOSI                     |
 // | 25 (GND)   | GND           | Ground                       |
 // | 27 (GND)   | GND           | Ground                       |
@@ -62,19 +67,27 @@
 // | 34 (CSB)   | 10            | LCD CS                       |
 // | 35 (RESET) | 9             | LCD Reset                    |
 // | 36 (IM0)   | GND           | Ground                       |
-// | 37 (IM1)   |               | +3.3V Power                  |
-// | 38 (IM2)   |               | +3.3V Power                  |
-// | 39 (VCI)   |               | +3.3V Power                  |
+// | 37 (IM1)   | 3v3           | +3.3V Power                  |
+// | 38 (IM2)   | 3v3           | +3.3V Power                  |
+// | 39 (VCI)   | 3v3           | +3.3V Power                  |
 // | 40 (GND)   | GND           | Ground                       |
 
-// | Touch Panel Pin | Seeeduino Pin | Connection Description |
-// |-----------------|---------------|------------------------|
-// | 1 (GND)         | GND           | Ground                 |
-// | 2 (RESET)       | 2             | TP Reset               |
-// | 3 (INT)         | 3             | TP Interrupt           |
-// | 4 (SDA)         | SDA           | I2C Data               |
-// | 5 (SCL)         | SCL           | I2C Clock              |
-// | 6 (VDD)         |               | +3.3V Power            |
+// | CTouch Panel Pin | Seeeduino Pin | Connection Description |
+// |------------------|---------------|------------------------|
+// | 1 (GND)          | GND           | Ground                 |
+// | 2 (RESET)        | 2             | TP Reset               |
+// | 3 (INT)          | 3             | TP Interrupt           |
+// | 4 (SDA)          | SDA           | I2C Data               |
+// | 5 (SCL)          | SCL           | I2C Clock              |
+// | 6 (VDD)          | 3v3           | +3.3V Power            |
+
+// | RTouch Panel Pin | Seeeduino Pin | Connection Description |
+// |------------------|---------------|------------------------|
+// | 1 (XL)           |   D14/A0      | TP Left                |
+// | 2 (YD)           |   D16/A2      | TP Down                |
+// | 3 (XR)           |   D15/A1      | TP Right               |
+// | 4 (YU)           |   D17/A3      | TP Up                  |
+
 
 //A CFA10112 micro SD card adapter should be used: https://www.crystalfontz.com/product/cfa10112
 // | microSD Pin | Seeeduino Pin | Connection Description |
@@ -92,13 +105,19 @@
 
 
 //========= CONFIGURATION OPTIONS
+#define Res 1
+#define Cap 2
+#define Touch_Type 2 // Define as 1 for Resistive, 2 for Capacitive. Anything else is non touch
+
+
+
 #define WAIT_TIME		2000
 #define DEMO_FONT		1
-#define DEMO_TOUCH		1
-#define DEMO_LINES		0
+#define DEMO_TOUCH		1 
+#define DEMO_LINES		1
 #define DEMO_CIRCLES	0
-#define DEMO_EXPANDING	1
-#define DEMO_CHECKER	1
+#define DEMO_EXPANDING	0
+#define DEMO_CHECKER	0
 #define DEMO_BMPIMAGES	0 /* enabling also enables use of SD card */
 
 //NOTE: DEMO_BMPIMAGES cannot be enabled if DEMO_FONT is also enabled.
@@ -121,109 +140,237 @@
 #include "font-ascii-12x16.h"
 
 #if DEMO_BMPIMAGES
-#include <SD.h>
-//this uses the Adafruit SD Arduino library
-// C:\Program Files (x86)\Arduino\libraries\SD\src\SD.cpp
-// C:\Program Files (x86)\Arduino\libraries\SD\src\SD.h
+	#include <SD.h>
+	//this uses the Adafruit SD Arduino library
+	// C:\Program Files (x86)\Arduino\libraries\SD\src\SD.cpp
+	// C:\Program Files (x86)\Arduino\libraries\SD\src\SD.h
 #endif
 
 //==============================================================================
+#if (Touch_Type == Cap)
+	//some touch related constants / vars
+	typedef enum
+	{
+		FIRMWARE_VERSION,
+		STATUS_REG,
+		DEVICE_CONTROL_REG,
+		TIMEOUT_TO_IDLE_REG,
+		XY_RESOLUTION_HIGH,
+		X_RESOLUTION_LOW,
+		Y_RESOLUTION_LOW,
+		DEVICE_CONTROL_REG2 = 0x09,
+		FIRMWARE_REVISION_3 = 0x0C,
+		FIRMWARE_REVISION_2,
+		FIRMWARE_REVISION_1,
+		FIRMWARE_REVISION_0,
+		FINGERS,
+		KEYS_REG,
+		XY0_COORD_H,
+		X0_COORD_L,
+		Y0_COORD_L,
+		I2C_PROTOCOL = 0x3E,
+		MAX_NUM_TOUCHES,
+		DATA_0_HIGH,
+		DATA_0_LOW,
+		MISC_CONTROL = 0xF1,
+		SMART_WAKE_UP_REG = 0xF2,
+		CHIP_ID = 0xF4,
+		PAGE_REG = 0xff,
+	} RegisterOffset;
 
-//some touch related constants / vars
-typedef enum
-{
-	FIRMWARE_VERSION,
-	STATUS_REG,
-	DEVICE_CONTROL_REG,
-	TIMEOUT_TO_IDLE_REG,
-	XY_RESOLUTION_HIGH,
-	X_RESOLUTION_LOW,
-	Y_RESOLUTION_LOW,
-	DEVICE_CONTROL_REG2 = 0x09,
-	FIRMWARE_REVISION_3 = 0x0C,
-	FIRMWARE_REVISION_2,
-	FIRMWARE_REVISION_1,
-	FIRMWARE_REVISION_0,
-	FINGERS,
-	KEYS_REG,
-	XY0_COORD_H,
-	X0_COORD_L,
-	Y0_COORD_L,
-	I2C_PROTOCOL = 0x3E,
-	MAX_NUM_TOUCHES,
-	DATA_0_HIGH,
-	DATA_0_LOW,
-	MISC_CONTROL = 0xF1,
-	SMART_WAKE_UP_REG = 0xF2,
-	CHIP_ID = 0xF4,
-	PAGE_REG = 0xff,
-} RegisterOffset;
+	typedef enum{
+		XY_COORD_H,
+		X_COORD_L,
+		Y_COORD_L,
+	} DataCoords;
 
-typedef enum{
-	XY_COORD_H,
-	X_COORD_L,
-	Y_COORD_L,
-} DataCoords;
+	#define TOUCH_RESET_PIN 2
+	#define TOUCH_INT_PIN 3
 
-#define TOUCH_RESET_PIN 2
-#define TOUCH_INT_PIN 3
+	#define TOUCH_I2C_ADDR 0x55
+	#define SITRONIX_MAX_SUPPORTED_POINT 8
 
-#define TOUCH_I2C_ADDR 0x55
-#define SITRONIX_MAX_SUPPORTED_POINT 8
+	#define X_RES_H_SHFT 4
+	#define X_RES_H_BMSK 0xf
+	#define Y_RES_H_SHFT 0
+	#define Y_RES_H_BMSK 0xf
+	#define FINGERS_SHFT 0
+	#define FINGERS_BMSK 0xf
+	#define X_COORD_VALID_SHFT 7
+	#define X_COORD_VALID_BMSK 0x1
+	#define X_COORD_H_SHFT 4
+	#define X_COORD_H_BMSK 0x7
+	#define Y_COORD_H_SHFT 0
+	#define Y_COORD_H_BMSK 0x7
 
-#define X_RES_H_SHFT 4
-#define X_RES_H_BMSK 0xf
-#define Y_RES_H_SHFT 0
-#define Y_RES_H_BMSK 0xf
-#define FINGERS_SHFT 0
-#define FINGERS_BMSK 0xf
-#define X_COORD_VALID_SHFT 7
-#define X_COORD_VALID_BMSK 0x1
-#define X_COORD_H_SHFT 4
-#define X_COORD_H_BMSK 0x7
-#define Y_COORD_H_SHFT 0
-#define Y_COORD_H_BMSK 0x7
+	struct sitronix_ts_point
+	{
+		uint8_t valid;
+		uint16_t x;
+		uint16_t y;
+	};
 
-struct sitronix_ts_point
-{
-	uint8_t valid;
+	struct sitronix_ts_data
+	{
+		uint8_t fw_version;
+		uint8_t fw_revision[4];
+		int resolution_x;
+		int resolution_y;
+		uint8_t max_touches;
+		//polled data
+		uint8_t water_flag;
+		uint8_t proximity_flag;
+		uint8_t gesture_type;
+		uint8_t keys_bits;
+		struct sitronix_ts_point coords[SITRONIX_MAX_SUPPORTED_POINT];
+	};
+
+	struct RGB
+	{
+		uint8_t r;
+		uint8_t g;
+		uint8_t b;	
+	};
+
+	const struct RGB touch_colors[SITRONIX_MAX_SUPPORTED_POINT] =
+	{
+		{0xFF,0x00,0x00},
+		{0x00,0xFF,0x00},
+		{0x00,0x00,0xFF},
+		{0xFF,0xFF,0x00},
+		{0xFF,0x00,0xFF},
+		{0x00,0xFF,0xFF},
+		{0xFF,0xFF,0xFF},
+		{0x80,0x80,0x80}
+	};
+#endif
+
+#if (Touch_Type == Res)
+	
+	#define TS_XL (14)
+	#define TS_XR (15)
+	#define TS_YD (16)
+	#define TS_YU (17)
+
+	#define FIND_MIN_MAX  0
+	//
+	#if(FIND_MIN_MAX)
+	uint16_t Xmin=1023;
+	uint16_t Xmax=0;
+	uint16_t Ymin=1023;
+	uint16_t Ymax=0;
+	#else
+	//Copied from the serial console window
+	uint16_t Xmin=131;
+	uint16_t Xmax=874;
+	uint16_t Ymin=99;
+	uint16_t Ymax=913;
+	#endif
+
+	uint8_t Read_Touch_Screen(uint16_t *x, uint16_t *y)
+	{
+	//See if there is a touch.
+	//Let YU float, make YD tug high, drive X1 and X2 low.
+	//Read Y1, if it is near 5v (~1024), then the screen is not
+	//touched. If it is near ground (~50) then the screen is
+	//touched.
+	uint16_t touched;
+	pinMode(TS_YU, INPUT);
+	digitalWrite(TS_YU, HIGH);
+	pinMode(TS_YD, INPUT_PULLUP);
+	digitalWrite(TS_YD, HIGH);
+	pinMode(TS_XL, OUTPUT);
+	digitalWrite(TS_XL, LOW);
+	pinMode(TS_XR, OUTPUT);
+	digitalWrite(TS_XR, LOW);
+	touched = analogRead(TS_YU);
+
+	//Idle YD as an input
+	pinMode(TS_YD, INPUT);
+	if (touched < 512)
+	{
+		//We are touched.
+		uint32_t X;
+		uint32_t Y;
+
+		//Read X. Set a gradient from 0v to 5v on X, then
+		//read the Y line to get the X contact point.
+		//pinMode(TS_YU,INPUT);    //Already set
+		//pinMode(TS_YD,INPUT);    //Already set
+		//pinMode(TS_XL,OUTPUT);   //Already set
+		digitalWrite(TS_XR, HIGH);
+		//pinMode(TS_XR,OUTPUT);   //Already set
+		//digitalWrite(TS_XL,LOW); //Already set
+		X = analogRead(TS_YD); //Could use YU
+
+		//Read Y. Set a gradient from 0v to 5v on Y, then
+		//read the X line to get the Y contact point.
+		pinMode(TS_XL, INPUT);
+		pinMode(TS_XR, INPUT);
+		pinMode(TS_YU, OUTPUT);
+		digitalWrite(TS_YU, HIGH);
+		pinMode(TS_YD, OUTPUT);
+		digitalWrite(TS_YD, LOW);
+		Y = analogRead(TS_XL); //Could use XR
+
+		Serial.print("X: ");
+		Serial.println(X);
+		Serial.print("Y: ");
+		Serial.println(Y);
+		//Idle the Y pins
+		pinMode(TS_YU, INPUT);
+		pinMode(TS_YD, INPUT);
+
+		//Calculate the pixel values, store in the user's pointers.
+		*x = ((X - (uint32_t)Xmin) * 240) / ((uint32_t)Xmax - (uint32_t)Xmin);
+		*y = 320 - ((Y - (uint32_t)Ymin) * 320) / ((uint32_t)Ymax - (uint32_t)Ymin);
+
+		//Return touched flag.
+		return (1);
+	}
+	else
+	{
+		//Not touched. Idle the pins that were set to output
+		//to detect the touch.
+		pinMode(TS_XL, INPUT);
+		pinMode(TS_XR, INPUT);
+		return (0);
+	}
+	}
+
+	//==============================================================================
+	void touchDemo(void)
+	{
 	uint16_t x;
 	uint16_t y;
-};
 
-struct sitronix_ts_data
-{
-	uint8_t fw_version;
-	uint8_t fw_revision[4];
-	int resolution_x;
-	int resolution_y;
-	uint8_t max_touches;
-	//polled data
-	uint8_t water_flag;
-	uint8_t proximity_flag;
-	uint8_t gesture_type;
-	uint8_t keys_bits;
-	struct sitronix_ts_point coords[SITRONIX_MAX_SUPPORTED_POINT];
-};
 
-struct RGB
-{
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;	
-};
+	//Enable this section for simple touch screen demo
+	while (1)
+	{
+		if (Read_Touch_Screen(&x, &y))
+		{
+		//touch in upper right corner gets a clear
+		if ((300 < x) && (y < 20))
+		{
+			Fill_LCD(0x00, 0x00, 0xFF);
+		}
+		//touch in upper left corner exits
+		if ((x < 20) && (y < 20))
+		{
+			break;
+		}
+		//Otherwise draw
+		LCD_Circle(x, y, 5, 0xFF, 0x00, 0xFF);
+		}
+		delay(10);
+	}
+	}
 
-const struct RGB touch_colors[SITRONIX_MAX_SUPPORTED_POINT] =
-{
-	{0xFF,0x00,0x00},
-	{0x00,0xFF,0x00},
-	{0x00,0x00,0xFF},
-	{0xFF,0xFF,0x00},
-	{0xFF,0x00,0xFF},
-	{0x00,0xFF,0xFF},
-	{0xFF,0xFF,0xFF},
-	{0x80,0x80,0x80}
-};
+
+#endif
+
+
 
 //==============================================================================
 
@@ -850,93 +997,93 @@ void Set_LCD_for_write_at_X_Y(uint16_t x, uint16_t y)
 }
 //==============================================================================
 #if (0) //simple
-void Fill_LCD(uint8_t R, uint8_t G, uint8_t B)
-{
-	uint32_t
-		i;
-	Set_LCD_for_write_at_X_Y(0, 319);
-
-	//Fill display with a given RGB value
-	for (i = 0; i < (320UL * 240UL); i++)
+	void Fill_LCD(uint8_t R, uint8_t G, uint8_t B)
 	{
+		uint32_t
+			i;
+		Set_LCD_for_write_at_X_Y(0, 319);
+
+		//Fill display with a given RGB value
+		for (i = 0; i < (320UL * 240UL); i++)
+		{
+			SPI_sendData(B); //Blue
+			SPI_sendData(G); //Green
+			SPI_sendData(R); //Red
+		}
+	}
+	#else //faster, bigger (6 bytes)
+	void Fill_LCD(uint8_t R, uint8_t G, uint8_t B)
+	{
+		uint32_t i;
+		Set_LCD_for_write_at_X_Y(0, 319);
+
+		// Select the LCD controller
+		CLR_CS;
+		// Select the LCD's data register
+		SET_RS;
+
+		//Fill display with a given RGB value
+		for (i = 0; i < (320UL * 240UL); i++)
+		{
+			SPI.transfer(B); //Blue
+			SPI.transfer(G); //Green
+			SPI.transfer(R); //Red
+		}
+		// Deselect the LCD controller
+		SET_CS;
+	}
+#endif
+//==============================================================================
+#if (0) //simple
+	void Put_Pixel(uint16_t x, uint16_t y, uint8_t R, uint8_t G, uint8_t B)
+	{
+		Set_LCD_for_write_at_X_Y(x, y);
+		//Write the single pixel's worth of data
 		SPI_sendData(B); //Blue
 		SPI_sendData(G); //Green
 		SPI_sendData(R); //Red
 	}
-}
-#else //faster, bigger (6 bytes)
-void Fill_LCD(uint8_t R, uint8_t G, uint8_t B)
-{
-	uint32_t i;
-	Set_LCD_for_write_at_X_Y(0, 319);
-
-	// Select the LCD controller
-	CLR_CS;
-	// Select the LCD's data register
-	SET_RS;
-
-	//Fill display with a given RGB value
-	for (i = 0; i < (320UL * 240UL); i++)
+	#else //faster, bigger (78 bytes)
+	void Put_Pixel(uint16_t x, uint16_t y, uint8_t R, uint8_t G, uint8_t B)
 	{
-		SPI.transfer(B); //Blue
-		SPI.transfer(G); //Green
-		SPI.transfer(R); //Red
-	}
-	// Deselect the LCD controller
-	SET_CS;
-}
-#endif
-//==============================================================================
-#if (0) //simple
-void Put_Pixel(uint16_t x, uint16_t y, uint8_t R, uint8_t G, uint8_t B)
-{
-	Set_LCD_for_write_at_X_Y(x, y);
-	//Write the single pixel's worth of data
-	SPI_sendData(B); //Blue
-	SPI_sendData(G); //Green
-	SPI_sendData(R); //Red
-}
-#else //faster, bigger (78 bytes)
-void Put_Pixel(uint16_t x, uint16_t y, uint8_t R, uint8_t G, uint8_t B)
-{
-	// Select the LCD controller
-	CLR_CS;
-	//CASET (2Ah): Column Address Set
-	// * The value of XS [15:0] and XE [15:0] are referred when RAMWR
-	//   command comes.
-	// * Each value represents one column line in the Frame Memory.
-	// * XS [15:0] always must be equal to or less than XE [15:0]
-	SPI_sendCommand(ST7789_2A_CASET); //Column address set
-	//Write the parameters for the "column address set" command
-	SPI_sendData(x >> 8);	 //Start MSB = XS[15:8]
-	SPI_sendData(x & 0x00FF); //Start LSB = XS[ 7:0]
-	SPI_sendData(0);		  //End MSB   = XE[15:8] 240-1
-	SPI_sendData(240);		  //End LSB   = XE[ 7:0]
-	//Write the "row address set" command to the LCD
-	//RASET (2Bh): Row Address Set
-	// * The value of YS [15:0] and YE [15:0] are referred when RAMWR
-	//   command comes.
-	// * Each value represents one row line in the Frame Memory.
-	// * YS [15:0] always must be equal to or less than YE [15:0]
-	SPI_sendCommand(ST7789_2B_RASET); //Row address set
+		// Select the LCD controller
+		CLR_CS;
+		//CASET (2Ah): Column Address Set
+		// * The value of XS [15:0] and XE [15:0] are referred when RAMWR
+		//   command comes.
+		// * Each value represents one column line in the Frame Memory.
+		// * XS [15:0] always must be equal to or less than XE [15:0]
+		SPI_sendCommand(ST7789_2A_CASET); //Column address set
+		//Write the parameters for the "column address set" command
+		SPI_sendData(x >> 8);	 //Start MSB = XS[15:8]
+		SPI_sendData(x & 0x00FF); //Start LSB = XS[ 7:0]
+		SPI_sendData(0);		  //End MSB   = XE[15:8] 240-1
+		SPI_sendData(240);		  //End LSB   = XE[ 7:0]
+		//Write the "row address set" command to the LCD
+		//RASET (2Bh): Row Address Set
+		// * The value of YS [15:0] and YE [15:0] are referred when RAMWR
+		//   command comes.
+		// * Each value represents one row line in the Frame Memory.
+		// * YS [15:0] always must be equal to or less than YE [15:0]
+		SPI_sendCommand(ST7789_2B_RASET); //Row address set
 
-	//Use 1st quadrant coordinates: 0,0 is lower left, 239,319 is upper right.
-	y = 319 - y;
-	//Write the parameters for the "row address set" command
-	SPI_sendData(y >> 8);	 //Start MSB = YS[15:8]
-	SPI_sendData(y & 0x00FF); //Start LSB = YS[ 7:0]
-	SPI_sendData(0x01);		  //End MSB   = YE[15:8] 320-1
-	SPI_sendData(0x3F);		  //End LSB   = YE[ 7:0]
-	//Write the "write data" command to the LCD
-	//RAMWR (2Ch): Memory Write
-	SPI_sendCommand(ST7789_2C_RAMWR); //write data
-	//Write the single pixel's worth of data
-	SPI_sendData(B); //Blue
-	SPI_sendData(G); //Green
-	SPI_sendData(R); //Red
-	// Deselect the LCD controller
-	SET_CS;
-}
+		//Use 1st quadrant coordinates: 0,0 is lower left, 239,319 is upper right.
+		y = 319 - y;
+		//Write the parameters for the "row address set" command
+		SPI_sendData(y >> 8);	 //Start MSB = YS[15:8]
+		SPI_sendData(y & 0x00FF); //Start LSB = YS[ 7:0]
+		SPI_sendData(0x01);		  //End MSB   = YE[15:8] 320-1
+		SPI_sendData(0x3F);		  //End LSB   = YE[ 7:0]
+		//Write the "write data" command to the LCD
+		//RAMWR (2Ch): Memory Write
+		SPI_sendCommand(ST7789_2C_RAMWR); //write data
+		//Write the single pixel's worth of data
+		SPI_sendData(B); //Blue
+		SPI_sendData(G); //Green
+		SPI_sendData(R); //Red
+		// Deselect the LCD controller
+		SET_CS;
+	}
 #endif
 //==============================================================================
 // From: http://en.wikipedia.org/wiki/Midpoint_circle_algorithm
@@ -1202,186 +1349,13 @@ void F12x16_DrawString(uint16_t x, uint16_t y, const char *text)
 	}
 }
 //==============================================================================
+
+
+
+
+
 //==============================================================================
-#if DEMO_TOUCH
-static int sttouch_i2c_read_bytes(uint8_t addr, uint8_t *rxbuf, int len)
-{
-	Wire.beginTransmission(TOUCH_I2C_ADDR);
-	Wire.write(addr);
-	Wire.endTransmission();
-	Wire.requestFrom(TOUCH_I2C_ADDR, len);
-	return Wire.readBytes(rxbuf, len);
-}
 
-static bool sttouch_get_fw_revision(struct sitronix_ts_data *ts)
-{
-	int ret = 0;
-	uint8_t buffer[4];
-	Serial.println(__FUNCTION__);
-
-	ret = sttouch_i2c_read_bytes(FIRMWARE_REVISION_3, buffer, 4);
-	if (ret != 4)
-	{
-		Serial.print("  read fw revision error"); Serial.println(ret);
-		return false;
-	}
-	else
-	{
-		memcpy(ts->fw_revision, buffer, 4);
-		Serial.print("  fw revision[3-0] = ");
-		for (int i = 0; i < 4; i++)
-		{
-			Serial.print(buffer[i]); Serial.print(" ");
-		}
-		Serial.println("");
-	}
-
-	ret = sttouch_i2c_read_bytes(FIRMWARE_VERSION, buffer, 1);
-	if (ret != 1)
-	{
-		Serial.print("  read fw version error = "); Serial.println(ret);
-		return false;
-	}
-	else
-	{
-		ts->fw_version = buffer[0];
-		Serial.print("  fw version = "); Serial.println(buffer[0]);
-	}
-
-	return true;
-}
-
-static bool sttouch_get_max_touches(struct sitronix_ts_data *ts)
-{
-	int ret = 0;
-	uint8_t buffer[1];
-	Serial.println(__FUNCTION__);
-
-	ret = sttouch_i2c_read_bytes(MAX_NUM_TOUCHES, buffer, 1);
-	if (ret != 1)
-	{
-		Serial.print("  read max touches error = "); Serial.println(ret);
-		return false;
-	}
-	else
-	{
-		ts->max_touches = buffer[0];
-		if (ts->max_touches > SITRONIX_MAX_SUPPORTED_POINT)
-			ts->max_touches = SITRONIX_MAX_SUPPORTED_POINT;
-		Serial.print("  max touches = "); Serial.println(ts->max_touches);
-	}
-	return true;
-}
-
-static bool sttouch_get_resolution(struct sitronix_ts_data *ts)
-{
-	int ret = 0;
-	uint8_t buffer[4];
-	Serial.println(__FUNCTION__);
-
-	ret = sttouch_i2c_read_bytes(XY_RESOLUTION_HIGH, buffer, 3);
-	if (ret != 3)
-	{
-		Serial.print("  read resolution error = "); Serial.println(ret);
-		return false;
-	}
-	else
-	{
-		ts->resolution_x = ((buffer[0] & (X_RES_H_BMSK << X_RES_H_SHFT)) << 4) | buffer[1];
-		ts->resolution_y = ((buffer[0] & Y_RES_H_BMSK) << 8) | buffer[2];
-		Serial.print("  resolution = "); Serial.print(ts->resolution_x); Serial.print(" x ");Serial.println(ts->resolution_y);
-	}
-	return true;
-}
-
-/*
-static bool sttouch_ts_get_device_status(uint8_t *err_code, uint8_t *dev_status)
-{
-	int ret = 0;
-	uint8_t buffer[8];
-	Serial.println(__FUNCTION__);
-
-	ret = sttouch_i2c_read_bytes(STATUS_REG, buffer, 8);
-	if (ret != 8)
-	{
-		Serial.print("  read status reg error = ");
-		Serial.println(ret);
-		return false;
-	}
-	*err_code = (buffer[0] & 0xf0) >> 4;
-	*dev_status = buffer[0] & 0xf;
-
-	Serial.print("  err_code = "); Serial.println(*err_code);
-	Serial.print("  dev_status = "); Serial.println(*dev_status);
-
-	return true;
-}
-*/
-
-static bool sttouch_ts_work_func(struct sitronix_ts_data *ts)
-{
-	uint16_t i;
-	uint16_t ret;
-	uint8_t buffer[4];
-
-	ret = sttouch_i2c_read_bytes(FINGERS, buffer, 1);
-	if (ret != 1)
-	{
-		Serial.println(__FUNCTION__);
-		Serial.print("  read fingers error = "); Serial.println(ret);
-		return false;
-	}
-	ts->water_flag = (buffer[0] & 0x10) >> 4;
-	ts->proximity_flag = (buffer[0] & 0x20) >> 5;
-	ts->gesture_type = buffer[0] & 0x0F;
-	if (ts->water_flag)
-	{
-		Serial.print("  water flag = "); Serial.println(ts->water_flag);
-	}
-	if (ts->proximity_flag)
-	{
-		Serial.print("  prox flag = "); Serial.println(ts->proximity_flag);
-	}
-	if (ts->gesture_type != 0)
-	{
-		Serial.print("  gesture type = "); Serial.println(ts->gesture_type);
-	}
-
-	ret = sttouch_i2c_read_bytes(KEYS_REG, buffer, 1);
-	if (ret != 1)
-	{
-		Serial.println(__FUNCTION__);
-		Serial.print("  read keys error = "); Serial.println(ret);
-		return false;
-	}
-	ts->keys_bits = buffer[0];
-
-	for (i = 0; i < ts->max_touches; i++)
-	{
-		ret = sttouch_i2c_read_bytes(KEYS_REG+1+(i*4), buffer, 4);
-		if (ret != 4)
-		{
-			Serial.println(__FUNCTION__);
-			Serial.print("  read coords error = "); Serial.println(ret);
-			ts->coords[i].valid = 0;
-		}
-		else
-		{
-			ts->coords[i].valid = buffer[0] >> 7;
-			if (ts->coords[i].valid)
-			{
-				Serial.print("  touch valid = ");
-				Serial.println(i);
-			}
-			ts->coords[i].x = (uint16_t)(buffer[XY_COORD_H] & 0x70) << 4 | buffer[X_COORD_L];
-			ts->coords[i].y = (uint16_t)(buffer[XY_COORD_H] & 0x07) << 8 | buffer[Y_COORD_L];
-		}
-	}
-
-	return true;
-}
-#endif
-//==============================================================================
 //==============================================================================
 
 void setup()
@@ -1402,15 +1376,17 @@ void setup()
 	CLR_MOSI;
 	CLR_CLK;
 
-	//setup touch
-	Wire.begin();
-	pinMode(TOUCH_INT_PIN, INPUT); //int in
-	//reset touch
-	pinMode(TOUCH_RESET_PIN, OUTPUT);
-	digitalWrite(TOUCH_RESET_PIN, 0);
-	delay(1);
-	digitalWrite(TOUCH_RESET_PIN, 1);
-	delay(50);
+	#if Touch_Type == Cap
+		//setup touch
+		Wire.begin();
+		pinMode(TOUCH_INT_PIN, INPUT); //int in
+		//reset touch
+		pinMode(TOUCH_RESET_PIN, OUTPUT);
+		digitalWrite(TOUCH_RESET_PIN, 0);
+		delay(1);
+		digitalWrite(TOUCH_RESET_PIN, 1);
+		delay(50);
+	#endif
 
 #if DEMO_BMPIMAGES
 	//Initialize the SD card (if used)
@@ -1424,6 +1400,68 @@ void setup()
 
 	//Initialize the LCD controller
 	Initialize_LCD();
+#if (FIND_MIN_MAX)
+  //Cheesy touch screen calibration
+  //Enable this loop to find limits of the touch screen.
+  //Stroke with a stylus from center to outside in every
+  //direction.
+  //Record the values from the serial monitor into the code above.
+  while (1)
+  {
+    uint16_t X;
+    uint16_t Y;
+
+    //Read X. Set a gradient from 0v to 5v on X, then
+    //read the Y line to get the X contact point.
+    pinMode(TS_YU, INPUT);
+    pinMode(TS_YD, INPUT);
+    pinMode(TS_XL, OUTPUT);
+    digitalWrite(TS_XL, HIGH);
+    pinMode(TS_XR, OUTPUT);
+    digitalWrite(TS_XR, LOW);
+    X = analogRead(TS_YU);
+
+    //Read Y. Set a gradient from 0v to 5v on Y, then
+    //read the X line to get the Y contact point.
+    pinMode(TS_XL, INPUT);
+    pinMode(TS_XR, INPUT);
+    pinMode(TS_YU, OUTPUT);
+    digitalWrite(TS_YU, HIGH);
+    pinMode(TS_YD, OUTPUT);
+    digitalWrite(TS_YD, LOW);
+    Y = analogRead(TS_XL);
+
+    if (X < Xmin)
+    {
+      Xmin = X;
+    }
+    if (Xmax < X)
+    {
+      Xmax = X;
+    }
+    if (Y < Ymin)
+    {
+      Ymin = Y;
+    }
+    if (Ymax < Y)
+    {
+      Ymax = Y;
+    }
+    //Display X and Y on Serial Monitor
+    Serial.print("Xmin = ");
+    Serial.print(Xmin);
+    Serial.print(" X = ");
+    Serial.print(X);
+    Serial.print(" Xmax = ");
+    Serial.print(Xmax);
+    Serial.print("| Ymin = ");
+    Serial.print(Ymin);
+    Serial.print(" Y = ");
+    Serial.print(Y);
+    Serial.print(" Ymax = ");
+    Serial.println(Ymax);
+  }
+#endif
 }
 //==============================================================================
 void loop()
@@ -1442,72 +1480,108 @@ void loop()
 #if DEMO_FONT
 	//text
 	Serial.println("fill LCD");
-	Fill_LCD(0x10, 0x10, 0x00);
+	Fill_LCD(0x04, 0x36, 0x04);
 	Serial.println("intro display");
 	//												 123456789012345678901234567890123456789
-	F12x16_DrawString(F12CENTREX(12), 10+(18*0),	"CRYSTALFONTZ");
-	F12x16_DrawString(F12CENTREX(18), 10+(18*1),	"CFAF240320A0-024SC");
-	F12x16_DrawString(F12CENTREX(19), 10+(18*3),	"240x320 TFT Display");
-	F12x16_DrawString(F12CENTREX(16), 10+(18*4),	"ST7789V Cont. IC");
-	F12x16_DrawString(F12CENTREX(14), 10+(18*8),	"Seeeduino 3.3V");
-	F12x16_DrawString(F12CENTREX(19), 10+(18*10),	"Simple Display Demo");
-	delay(WAIT_TIME * 2);
+
+	#if (Touch_Type == Cap)
+		F12x16_DrawString(F12CENTREX(12), 10+(18*0),	"CRYSTALFONTZ");
+		F12x16_DrawString(F12CENTREX(18), 10+(18*1),	"CFAF240320A0-024SC");
+		F12x16_DrawString(F12CENTREX(19), 10+(18*3),	"240x320 TFT Display");
+		F12x16_DrawString(F12CENTREX(16), 10+(18*4),	"ST7789V Cont. IC");
+		F12x16_DrawString(F12CENTREX(15), 10+(18*5),	"Cap Touch Panel");
+		F12x16_DrawString(F12CENTREX(14), 10+(18*8),	"Seeeduino 3.3V");
+		F12x16_DrawString(F12CENTREX(19), 10+(18*10),	"Simple Display Demo");
+		delay(WAIT_TIME * 2);
+	
+	#elif (Touch_Type == Res)
+		F12x16_DrawString(F12CENTREX(12), 10+(18*0),	"CRYSTALFONTZ");
+		F12x16_DrawString(F12CENTREX(18), 10+(18*1),	"CFAF240320A0-024SR");
+		F12x16_DrawString(F12CENTREX(19), 10+(18*3),	"240x320 TFT Display");
+		F12x16_DrawString(F12CENTREX(16), 10+(18*4),	"ST7789V Cont. IC");
+		F12x16_DrawString(F12CENTREX(15), 10+(18*5),	"Res Touch Panel");
+		F12x16_DrawString(F12CENTREX(14), 10+(18*8),	"Seeeduino 3.3V");
+		F12x16_DrawString(F12CENTREX(19), 10+(18*10),	"Simple Display Demo");
+		delay(WAIT_TIME * 2);
+	#else
+		F12x16_DrawString(F12CENTREX(12),  5+(18*0),	"CRYSTALFONTZ");
+		F12x16_DrawString(F12CENTREX(18), 10+(18*1),	"CFAF240320A0-024SN");
+		F12x16_DrawString(F12CENTREX(19), 10+(18*3),	"240x320 TFT Display");
+		F12x16_DrawString(F12CENTREX(16), 10+(18*4),	"ST7789V Cont. IC");
+		F12x16_DrawString(F12CENTREX(14), 10+(18*8),	"Seeeduino 3.3V");
+		F12x16_DrawString(F12CENTREX(19), 10+(18*9),	"Simple Display Demo");
+	#endif	
 #endif	
 
-#if DEMO_TOUCH
-	//touch demo screen
-	char temps[20];
-	struct sitronix_ts_data tsdata;
 
+#if DEMO_TOUCH
 	Serial.println("fill LCD");
-	Fill_LCD(0x00, 0x10, 0x10);
-	Serial.println("touch display");
-	memset(&tsdata, 0x00, sizeof(tsdata));
-	//												 123456789012345678901234567890123456789
-	F12x16_DrawString(F12CENTREX(19), 10+(18*0),	"TOUCH PANEL DETAILS");
-	F12x16_DrawString(F12CENTREX(15), 10+(18*2),	"SITRONIX ST1624");
-	sttouch_get_resolution(&tsdata);
-	sttouch_get_fw_revision(&tsdata);
-	sttouch_get_max_touches(&tsdata);
-	if (tsdata.max_touches != 0)
-	{
-		//we can see the touch ic
-		sprintf(temps, "FW Ver: %d", tsdata.fw_version);
-		F12x16_DrawString(3, 10+(18*4), temps);
-		sprintf(temps, "FW Rev: %d %d %d %d", tsdata.fw_revision[0], tsdata.fw_revision[1], tsdata.fw_revision[2], tsdata.fw_revision[3]);
-		F12x16_DrawString(3, 10+(18*5), temps);
-		sprintf(temps, "Max Touches: %d", tsdata.max_touches);
-		F12x16_DrawString(3, 10+(18*7), temps);
+	Fill_LCD(0x00, 0x0f, 0xA6);
+	#if (Touch_Type == Res)
+		F12x16_DrawString(F12CENTREX(19), 10+(18*0),	"TOUCH PANEL DETAILS");
+		F12x16_DrawString(F12CENTREX(15), 10+(18*2),	"Resistive Touch");
 		F12x16_DrawString(F12CENTREX(14), 320-18-5,		"!! TOUCH ME !!");
-		//now do touch circle drawing for xxx seconds
-		uint32_t loop_end = millis() + WAIT_TIME*5;
-		while(millis() < loop_end)
+		touchDemo();
+	#elif (Touch_Type == Cap)
+	//touch demo screen
+		char temps[20];
+		struct sitronix_ts_data tsdata;
+
+
+		Serial.println("touch display");
+		memset(&tsdata, 0x00, sizeof(tsdata));
+		//												 123456789012345678901234567890123456789
+		F12x16_DrawString(F12CENTREX(19), 10+(18*0),	"TOUCH PANEL DETAILS");
+		F12x16_DrawString(F12CENTREX(15), 10+(18*2),	"SITRONIX ST1624");
+		sttouch_get_resolution(&tsdata);
+		sttouch_get_fw_revision(&tsdata);
+		sttouch_get_max_touches(&tsdata);
+		if (tsdata.max_touches != 0)
 		{
-			sttouch_ts_work_func(&tsdata);
-			for (i = 0; i < tsdata.max_touches; i++)
+			//we can see the touch ic
+			sprintf(temps, "FW Ver: %d", tsdata.fw_version);
+			F12x16_DrawString(3, 10+(18*4), temps);
+			sprintf(temps, "FW Rev: %d %d %d %d", tsdata.fw_revision[0], tsdata.fw_revision[1], tsdata.fw_revision[2], tsdata.fw_revision[3]);
+			F12x16_DrawString(3, 10+(18*5), temps);
+			sprintf(temps, "Max Touches: %d", tsdata.max_touches);
+			F12x16_DrawString(3, 10+(18*7), temps);
+			F12x16_DrawString(F12CENTREX(14), 320-18-5,		"!! TOUCH ME !!");
+			//now do touch circle drawing for xxx seconds
+			uint32_t loop_end = millis() + WAIT_TIME*5;
+			while(millis() < loop_end)
 			{
-				if (tsdata.coords[i].valid)
-					//we have a touch, draw a little circle at the detected point
-					LCD_Circle(tsdata.coords[i].x, tsdata.coords[i].y, 4, touch_colors[i].r, touch_colors[i].g, touch_colors[i].b);
+				sttouch_ts_work_func(&tsdata);
+				for (i = 0; i < tsdata.max_touches; i++)
+				{
+					if (tsdata.coords[i].valid)
+						//we have a touch, draw a little circle at the detected point
+						LCD_Circle(tsdata.coords[i].x, tsdata.coords[i].y, 4, touch_colors[i].r, touch_colors[i].g, touch_colors[i].b);
+				}
 			}
 		}
-	}
-	else
-	{
-		//												 123456789012345678901234567890123456789
-		F12x16_DrawString(F12CENTREX(12), 10+(18*4),	"TOUCH IC NOT");
-		F12x16_DrawString(F12CENTREX(9), 10+(18*5),		"DETECTED!");
-		F12x16_DrawString(F12CENTREX(17), 10+(18*7),	"CONNECTION ISSUE?");
-		delay(WAIT_TIME * 2);
-	}
+		else
+		{
+			//												 123456789012345678901234567890123456789
+			F12x16_DrawString(F12CENTREX(12), 10+(18*4),	"TOUCH IC NOT");
+			F12x16_DrawString(F12CENTREX(9), 10+(18*5),		"DETECTED!");
+			F12x16_DrawString(F12CENTREX(17), 10+(18*7),	"CONNECTION ISSUE?");
+			delay(WAIT_TIME * 2);
+		}
+	#else
+		F12x16_DrawString(F12CENTREX(10), 10+(18*4),	"Touch_Type");
+		F12x16_DrawString(F12CENTREX(11), 10+(18*5),		"not defined");
+		F12x16_DrawString(F12CENTREX(15), 10+(18*7),	"correct in code");
+		F12x16_DrawString(F12CENTREX(8), 10+(18*8),	"line 110");
+		delay(WAIT_TIME);
+	#endif
 #endif	
 
 #if DEMO_LINES
 	//Cheesy lines
 	Serial.println("fill LCD");
-	Fill_LCD(0x20, 0x20, 0x20);
+	Fill_LCD(0x00, 0x00, 0x00);
 	Serial.println("cheesy lines");
-	r = 0xff; g = 0x00; b = 0x80;
+	r = 0x00; g = 0x0F; b = 0xA0;
 	for (x = 0; x < 240; x++)
 		LCD_Line(120, 160, x, 0, r++, g--, b += 2);
 	for (y = 0; y < 320; y++)
